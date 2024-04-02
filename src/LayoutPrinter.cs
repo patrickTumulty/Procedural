@@ -7,6 +7,8 @@ namespace CSharpSandbox
         private static readonly Dictionary<LayoutSymbol, char> symbolsMap = new() {
             { LayoutSymbol.StraightH, '─' },
             { LayoutSymbol.StraightV, '│' },
+            { LayoutSymbol.StraightEW, '•' },
+            { LayoutSymbol.StraightNS, '•' },
             { LayoutSymbol.CornerNW, '┘' },
             { LayoutSymbol.CornerNE, '└' },
             { LayoutSymbol.CornerSW, '┐' },
@@ -29,8 +31,8 @@ namespace CSharpSandbox
             { LayoutSymbol.CornerSWE, new bool[] { false, true, true, true }},
             { LayoutSymbol.CornerNWE, new bool[] { true, true, false, true }},
             { LayoutSymbol.CornerNSEW, new bool[] { true, true, true, true }},
-            { LayoutSymbol.StraightH, new bool[] { false, true, false, true }},
-            { LayoutSymbol.StraightV, new bool[] { true, false, true, false }},
+            { LayoutSymbol.StraightEW, new bool[] { false, true, false, true }},
+            { LayoutSymbol.StraightNS, new bool[] { true, false, true, false }},
         };
 
         private readonly char[,] areaMatrix;
@@ -137,7 +139,7 @@ namespace CSharpSandbox
             }
             else
             {
-                int lowerX = Math.Min(from.X, to.X) + 1;
+                int lowerX = (Math.Min(from.X, to.X) * 2) + 1;
                 int upperX = Math.Max(from.X, to.X) * 2;
                 for (int i = lowerX; i < upperX; i++)
                 {
@@ -165,7 +167,7 @@ namespace CSharpSandbox
                     return symbolsMap[symbol];
                 }
             }
-            return '#';
+            return '•';
         }
 
 
@@ -182,6 +184,8 @@ namespace CSharpSandbox
             CornerNSEW = 8,
             StraightH = 9,
             StraightV = 10,
+            StraightEW = 11,
+            StraightNS = 12,
         }
     }
 }

@@ -46,11 +46,26 @@ namespace Procedural
         }
     }
 
+    public readonly struct InsertionPoint
+    {
+        public readonly VertexNode Node { get; }
+        public readonly Direction InsertDirection { get; }
+        public readonly VertexNode? InsertNode { get; }
+
+        public InsertionPoint(VertexNode node, Direction direction) : this(node, direction, null)
+        {
+        }
+
+        public InsertionPoint(VertexNode node, Direction direction, VertexNode? insertNode)
+        {
+            Node = node;
+            InsertDirection = direction;
+            InsertNode = insertNode;
+        }
+    }
+
     public class VertexNode
     {
-        private static readonly Comparison<VertexNode> yAxisComparison = (a, b) => a.Y.CompareTo(b.Y);
-        private static readonly Comparison<VertexNode> xAxisComparison = (a, b) => a.X.CompareTo(b.X);
-
         public int X { get; }
         public int Y { get; }
         public VertexNode?[] AdjascentNodes { get; }
@@ -62,6 +77,74 @@ namespace Procedural
             AdjascentNodes = new VertexNode?[] { null, null, null, null, };
         }
 
+        public static bool WithinRangeInclusive(int value, int r1, int r2)
+        {
+            int min = Math.Min(r1, r2);
+            int max = Math.Max(r1, r2);
+            return min <= value && value <= max;
+        }
+
+        public static bool WithinRangeExclusive(int value, int r1, int r2)
+        {
+            int min = Math.Min(r1, r2);
+            int max = Math.Max(r1, r2);
+            return min < value && value < max;
+        }
+
+        public static void GetAxisIntersectionsBetween(Dictionary<int, HashSet<VertexNode>> axisMap,
+                                                       HashSet<int> visited,
+                                                       VertexNode node,
+                                                       Axis axis,
+                                                       int axisRangeLow,
+                                                       int axisRangeHigh,
+                                                       int searchAxis)
+        {
+            if (HasBeenVisited(visited, node))
+            {
+                return;
+            }
+
+            if (axis == Axis.X)
+            {
+                AddNodeToMapIfWithinRange(axisMap, node, node.X, node.Y, axisRangeLow, axisRangeHigh, searchAxis);
+            }
+            else
+            {
+                AddNodeToMapIfWithinRange(axisMap, node, node.Y, node.X, axisRangeLow, axisRangeHigh, searchAxis);
+            }
+
+            foreach (VertexNode? n in node.AdjascentNodes)
+            {
+                if (n == null)
+                {
+                    continue;
+                }
+
+                GetAxisIntersectionsBetween(axisMap, visited, n, axis, axisRangeLow, axisRangeHigh, searchAxis);
+            }
+        }
+
+        private static void AddNodeToMapIfWithinRange(Dictionary<int, HashSet<VertexNode>> axisMap,
+                                                      VertexNode node,
+                                                      int rangeValue,
+                                                      int keyValue,
+                                                      int axisRangeLow,
+                                                      int axisRangeHigh,
+                                                      int searchAxis)
+        {
+            if (axisRangeLow <= rangeValue && rangeValue <= axisRangeHigh && keyValue != searchAxis)
+            {
+                if (axisMap.TryGetValue(keyValue, out HashSet<VertexNode>? value))
+                {
+                    _ = value.Add(node);
+                }
+                else
+                {
+                    axisMap.Add(keyValue, new() { node });
+                }
+            }
+        }
+
         public static void ConnectAdjascentNode(Direction direction, VertexNode node, VertexNode connectingNode)
         {
             ConnectAdjascentNode((byte)direction, node, connectingNode);
@@ -70,7 +153,6 @@ namespace Procedural
         public static void ConnectAdjascentNode(byte direction, VertexNode node, VertexNode connectingNode)
         {
             node.AdjascentNodes[direction] = connectingNode;
-
             byte invertedDirection = DirectionUtils.InvertDirection(direction);
             VertexNode? reverseAdjascentNode = connectingNode.AdjascentNodes[invertedDirection];
             if (reverseAdjascentNode == null || reverseAdjascentNode != node)
@@ -79,95 +161,244 @@ namespace Procedural
             }
         }
 
-        public static List<VertexNode> GetNodesAlongAxisLine(VertexNode root, Axis axis, int axisValue)
-        {
-            return CollectVertexNodes((node) => axis == Axis.X ? node.X == axisValue : node.Y == axisValue, root);
-        }
-
         public static bool ConnectionExists(Direction direction, VertexNode v1, VertexNode v2)
         {
             return v1.AdjascentNodes[(byte)direction] == v2
-                && v2.AdjascentNodes[DirectionUtils.InvertDirection((byte)direction)] == v1;
+                   && v2.AdjascentNodes[DirectionUtils.InvertDirection((byte)direction)] == v1;
         }
 
         public static void InsertNode(Direction direction, VertexNode root, VertexNode newNode)
         {
-            bool isVertical = DirectionUtils.IsVertical(direction);
-            byte directionByte = (byte)direction;
-            VertexNode? existingNode = root.AdjascentNodes[directionByte];
-            if (existingNode == null)
+            VertexNode? existingNode = root.AdjascentNodes[(byte)direction];
+            if (existingNode != null)
             {
-                int axisX = newNode.X;
-                int axisY = newNode.Y;
-                Axis axis = DirectionUtils.GetAxis(direction);
-
-                List<VertexNode> axisList = GetNodesAlongAxisLine(root, axis, axis == Axis.X ? axisX : axisY);
-                axisList.Sort(axis == Axis.X ? xAxisComparison : yAxisComparison);
-
-                if (axisList.Count >= 2 && !axisList.Contains(newNode))
+                if (newNode != existingNode)
                 {
-                    VertexNode lower = axisList[0];
-                    InsertNode(axis == Axis.Y ? Direction.Right : Direction.Down, lower, newNode);
+                    InsertWithExistingNode(direction, root, newNode, existingNode);
+                }
+            }
+            else
+            {
+                ConnectAdjascentNode(direction, root, newNode);
+
+                InsertionPoint? insertionPoint = FindInsertionPoint(new HashSet<int>(), root, newNode);
+                if (insertionPoint != null)
+                {
+                    InsertNode(insertionPoint.Value.InsertDirection, insertionPoint.Value.Node, newNode);
                 }
 
-                ConnectAdjascentNode(direction, root, newNode);
+                List<InsertionPoint> intersectionPoints = new();
+                FindIntersectionPoints(new HashSet<int>(), intersectionPoints, root, newNode, direction, GetInsertLength(root, direction, newNode));
+
+                foreach (InsertionPoint point in intersectionPoints)
+                {
+                    if (point.InsertNode == null)
+                    {
+                        continue;
+                    }
+
+                    InsertNode(point.InsertDirection, point.Node, point.InsertNode);
+                    InsertNode(direction, root, point.InsertNode);
+                }
+            }
+        }
+
+        private static int GetInsertLength(VertexNode root, Direction direction, VertexNode insertNode)
+        {
+            return direction switch
+            {
+                Direction.Up or Direction.Down => Math.Abs(root.Y - insertNode.Y),
+                Direction.Left or Direction.Right => Math.Abs(root.X - insertNode.X),
+                _ => 0,
+            };
+        }
+
+        private static bool NodeBetweenTwoNodes(VertexNode node, VertexNode nodeA, VertexNode nodeB)
+        {
+            if (node.X == nodeA.X && node.X == nodeB.X)
+            {
+                return WithinRangeExclusive(node.Y, nodeA.Y, nodeB.Y);
+            }
+            else if (node.Y == nodeA.Y && node.Y == nodeB.Y)
+            {
+                return WithinRangeExclusive(node.X, nodeA.X, nodeB.X);
+            }
+            return false;
+        }
+
+        private static bool NodeIntersectsLine(Axis axis, VertexNode node, VertexNode nodeA, VertexNode nodeB)
+        {
+            if (axis == Axis.Y)
+            {
+                return WithinRangeExclusive(node.Y, nodeA.Y, nodeB.Y);
+            }
+            else
+            {
+                return WithinRangeExclusive(node.X, nodeA.X, nodeB.X);
+            }
+        }
+
+        private static void FindIntersectionPoints(HashSet<int> visited,
+                                                   List<InsertionPoint> intersections,
+                                                   VertexNode root,
+                                                   VertexNode insertNode,
+                                                   Direction insertDirection,
+                                                   int insertLength)
+        {
+            if (HasBeenVisited(visited, root))
+            {
                 return;
             }
 
-            int coordinateExisting = isVertical ? existingNode.Y : existingNode.X;
-            int coordinateNew = isVertical ? newNode.Y : newNode.X;
+            Axis insertAxis = DirectionUtils.GetAxis(insertDirection);
 
-            if (coordinateNew > coordinateExisting)
+            foreach (Direction direction in Enum.GetValues(typeof(Direction)))
             {
-                InsertNode(direction, newNode, existingNode);
+                VertexNode? adjascentNode = root.AdjascentNodes[(byte)direction];
+                if (adjascentNode == null)
+                {
+                    continue;
+                }
+
+                Axis axis = DirectionUtils.GetAxis(direction);
+
+                if (NodeIntersectsLine(axis, insertNode, adjascentNode, root))
+                {
+                    bool isInBounds = false;
+                    switch (insertDirection)
+                    {
+                        case Direction.Up:
+                            isInBounds = root.Y > insertNode.Y && root.Y < (insertNode.Y + insertLength);
+                            break;
+                        case Direction.Left:
+                            isInBounds = root.X > insertNode.X && root.X < (insertNode.X + insertLength);
+                            break;
+                        case Direction.Down:
+                            isInBounds = root.Y < insertNode.Y && root.Y > (insertNode.Y - insertLength);
+                            break;
+                        case Direction.Right:
+                            isInBounds = root.X < insertNode.X && root.X > (insertNode.X - insertLength);
+                            break;
+                        default:
+                            break;
+                    }
+
+                    if (isInBounds)
+                    {
+                        if (axis == Axis.X && insertAxis == Axis.Y)
+                        {
+                            intersections.Add(new InsertionPoint(root, direction, new(root.Y, insertNode.X)));
+                        }
+                        else if (axis == Axis.Y && insertAxis == Axis.X)
+                        {
+                            intersections.Add(new InsertionPoint(root, direction, new(root.X, insertNode.Y)));
+                        }
+                    }
+                }
             }
-            else if (coordinateNew < coordinateExisting)
+
+            foreach (VertexNode? adjascentNode in root.AdjascentNodes)
             {
-                // Inserting node on a given axis
-                root.AdjascentNodes[directionByte] = newNode;
+                if (adjascentNode == null)
+                {
+                    continue;
+                }
+
+                FindIntersectionPoints(visited, intersections, adjascentNode, insertNode, insertDirection, insertLength);
+            }
+        }
+
+        private static InsertionPoint? FindInsertionPoint(HashSet<int> visited, VertexNode root, VertexNode insertNode)
+        {
+            if (HasBeenVisited(visited, root))
+            {
+                return null;
+            }
+
+            foreach (Direction direction in Enum.GetValues(typeof(Direction)))
+            {
+                VertexNode? adjascentNode = root.AdjascentNodes[(byte)direction];
+                if (adjascentNode == null)
+                {
+                    continue;
+                }
+
+                if (NodeBetweenTwoNodes(insertNode, adjascentNode, root))
+                {
+                    return new InsertionPoint(root, direction);
+                }
+            }
+
+            foreach (VertexNode? adjascentNode in root.AdjascentNodes)
+            {
+                if (adjascentNode == null)
+                {
+                    continue;
+                }
+
+                InsertionPoint? insertionPoint = FindInsertionPoint(visited, adjascentNode, insertNode);
+                if (insertionPoint != null)
+                {
+                    return insertionPoint;
+                }
+            }
+
+            return null;
+        }
+
+        private static void InsertWithExistingNode(Direction direction, VertexNode root, VertexNode newNode, VertexNode existingNode)
+        {
+            if (GreaterThan(direction, newNode, existingNode))
+            {
+                InsertNode(direction, existingNode, newNode);
+            }
+            else if (LessThan(direction, newNode, existingNode))
+            {
                 ConnectAdjascentNode(direction, root, newNode);
                 ConnectAdjascentNode(DirectionUtils.InvertDirection(direction), existingNode, newNode);
             }
         }
 
-
-        public static List<VertexNode> CollectVertexNodes(Predicate<VertexNode> predicate, VertexNode? root)
+        public static bool GreaterThan(Direction direction, VertexNode a, VertexNode b)
         {
-            List<VertexNode> nodeList = new();
-            HashSet<int> visited = new();
-
-            CollectVertexNodes(nodeList, visited, predicate, root);
-
-            return nodeList;
+            return direction switch
+            {
+                Direction.Up => a.Y < b.Y,
+                Direction.Left => a.X < b.X,
+                Direction.Down => a.Y > b.Y,
+                Direction.Right => a.X > b.X,
+                _ => false,
+            };
         }
 
-        private static void CollectVertexNodes(List<VertexNode> nodeList,
-                                               HashSet<int> visited,
-                                               Predicate<VertexNode> predicate,
-                                               VertexNode? node)
+        public static bool LessThan(Direction direction, VertexNode a, VertexNode b)
         {
-            if (node == null)
+            return direction switch
             {
-                return;
-            }
+                Direction.Up => a.Y > b.Y,
+                Direction.Left => a.X > b.X,
+                Direction.Down => a.Y < b.Y,
+                Direction.Right => a.X < b.X,
+                _ => false,
+            };
+        }
 
+        public static int GetSeachAxisValue(Axis axis, VertexNode node)
+        {
+            return axis == Axis.X ? node.X : node.Y;
+        }
+
+        private static bool HasBeenVisited(HashSet<int> visited, VertexNode node)
+        {
             int hash = node.GetHashCode();
             if (visited.Contains(hash))
             {
-                return;
+                return true;
             }
 
             _ = visited.Add(hash);
 
-            if (predicate(node) && !nodeList.Contains(node))
-            {
-                nodeList.Add(node);
-            }
-
-            for (int i = 0; i < node.AdjascentNodes.Length; i++)
-            {
-                CollectVertexNodes(nodeList, visited, predicate, node.AdjascentNodes[i]);
-            }
+            return false;
         }
 
         public static bool IsConnected(VertexNode root, VertexNode node)
@@ -182,9 +413,14 @@ namespace Procedural
             return false;
         }
 
+        public string GetAdjascentNodesString()
+        {
+            return $"[U{AdjascentNodes[0],8}, L{AdjascentNodes[1],8}, D{AdjascentNodes[2],8}, R{AdjascentNodes[3],8}]";
+        }
+
         public override string ToString()
         {
-            return $"(X={X}, Y={Y})";
+            return $"({X,2}, {Y,2})";
         }
     }
 
@@ -202,6 +438,10 @@ namespace Procedural
         }
     }
 
+    public static class VertexNodeOperator
+    {
+    }
+
     public class LayoutGenerator
     {
         public static LayoutDescriptor Generate()
@@ -213,10 +453,36 @@ namespace Procedural
 
             VertexNode root = new(0, 0);
 
+            // AddRectangle(root, 2, 2);
+            //
+            // VertexNode n1 = new(5, 0);
+            // VertexNode.InsertNode(Direction.Right, root, n1);
+            //
+            // VertexNode n6 = new(0, 5);
+            // VertexNode.InsertNode(Direction.Down, root, n6);
+            //
+            // VertexNode n3 = new(5, 5);
+            // VertexNode.InsertNode(Direction.Down, n1, n3);
+            //
+            // VertexNode n2 = new(10, 0);
+            // VertexNode.InsertNode(Direction.Right, n1, n2);
+            //
+            // VertexNode n4 = new(10, 3);
+            // VertexNode.InsertNode(Direction.Down, n2, n4);
+            //
+            // VertexNode n5 = new(4, 3);
+            // VertexNode.InsertNode(Direction.Left, n4, n5);
+            //
+            // PrintGraph(new HashSet<int>(), root);
+
             AddRectangle(root, width, height);
             AddRectangle(root, 10, 10);
             AddRectangle(root, 4, 4);
-            // AddRectangle(root, 15, 5);
+            AddRectangle(root, 15, 5);
+            AddRectangle(root, 18, 3);
+            AddRectangle(root, 2, 2);
+
+            PrintGraph(new HashSet<int>(), root);
 
             // VertexNode topLeft = new(2, 0);
             // VertexNode.InsertNode(Direction.Right, root, topLeft);
@@ -243,7 +509,7 @@ namespace Procedural
 
             _ = visited.Add(root.GetHashCode());
 
-            Console.WriteLine(root);
+            Console.WriteLine($"{root} : {root.GetAdjascentNodesString()}");
 
             foreach (VertexNode? n in root.AdjascentNodes)
             {
