@@ -40,15 +40,18 @@ namespace CSharpSandbox
 
         public LayoutPrinter(LayoutDescriptor layoutDescriptor)
         {
+            AreaBounds ab = GridNodeUtils.GetAreaBounds(layoutDescriptor.Node);
+            Console.WriteLine(ab);
+
+
+
             areaMatrix = new char[layoutDescriptor.AreaHeight, (layoutDescriptor.AreaWidth * 2) - 1];
             InitMatrix();
 
-            HashSet<int> visitedSet = new();
-            GridNode root = layoutDescriptor.RootVertexNode;
-            DrawLines(visitedSet, root);
+            GridNode root = layoutDescriptor.Node;
 
-            visitedSet.Clear();
-            DrawIntersections(visitedSet, root);
+            DrawLines(new(), root);
+            DrawIntersections(new(), root);
 
             PrintAreaMatrix();
         }
@@ -120,7 +123,11 @@ namespace CSharpSandbox
                 GridNode? node = currentNode.AdjascentNodes[directionInt];
                 if (node != null)
                 {
-                    DrawConnectingLine(direction, currentNode, node);
+                    if (direction is Direction.Down or Direction.Right)
+                    {
+                        DrawConnectingLine(direction, currentNode, node);
+                    }
+
                     DrawLines(visited, node);
                 }
             }
@@ -128,11 +135,13 @@ namespace CSharpSandbox
 
         private void DrawConnectingLine(Direction direction, GridNode from, GridNode to)
         {
-            char connector = DirectionUtils.IsVertical(direction) ? symbolsMap[LayoutSymbol.StraightV] : symbolsMap[LayoutSymbol.StraightH];
-            if (DirectionUtils.IsVertical(direction))
+            Axis axis = DirectionUtils.GetAxis(direction);
+            char connector = axis == Axis.Y ? symbolsMap[LayoutSymbol.StraightV] : symbolsMap[LayoutSymbol.StraightH];
+
+            if (axis == Axis.Y)
             {
-                int lowerY = Math.Min(from.Y, to.Y) + 1;
-                int upperY = Math.Max(from.Y, to.Y);
+                int lowerY = from.Y + 1;
+                int upperY = to.Y;
                 for (int i = lowerY; i < upperY; i++)
                 {
                     WriteCharacter(from.X, i, connector);
@@ -140,8 +149,8 @@ namespace CSharpSandbox
             }
             else
             {
-                int lowerX = (Math.Min(from.X, to.X) * 2) + 1;
-                int upperX = Math.Max(from.X, to.X) * 2;
+                int lowerX = (from.X * 2) + 1;
+                int upperX = to.X * 2;
                 for (int i = lowerX; i < upperX; i++)
                 {
                     areaMatrix[from.Y, i] = connector;
