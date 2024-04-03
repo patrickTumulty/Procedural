@@ -1,3 +1,4 @@
+using Grid;
 using Procedural;
 
 namespace CSharpSandbox
@@ -43,7 +44,7 @@ namespace CSharpSandbox
             InitMatrix();
 
             HashSet<int> visitedSet = new();
-            VertexNode root = layoutDescriptor.RootVertexNode;
+            GridNode root = layoutDescriptor.RootVertexNode;
             DrawLines(visitedSet, root);
 
             visitedSet.Clear();
@@ -80,7 +81,7 @@ namespace CSharpSandbox
             }
         }
 
-        private void DrawIntersections(HashSet<int> visited, VertexNode currentNode)
+        private void DrawIntersections(HashSet<int> visited, GridNode currentNode)
         {
             int hash = currentNode.GetHashCode();
             if (visited.Contains(hash))
@@ -95,7 +96,7 @@ namespace CSharpSandbox
             foreach (Direction direction in Enum.GetValues(typeof(Direction)))
             {
                 int directionInt = (int)direction;
-                VertexNode? node = currentNode.AdjascentNodes[directionInt];
+                GridNode? node = currentNode.AdjascentNodes[directionInt];
                 if (node != null)
                 {
                     DrawIntersections(visited, node);
@@ -103,7 +104,7 @@ namespace CSharpSandbox
             }
         }
 
-        private void DrawLines(HashSet<int> visited, VertexNode currentNode)
+        private void DrawLines(HashSet<int> visited, GridNode currentNode)
         {
             int hash = currentNode.GetHashCode();
             if (visited.Contains(hash))
@@ -116,7 +117,7 @@ namespace CSharpSandbox
             foreach (Direction direction in Enum.GetValues(typeof(Direction)))
             {
                 int directionInt = (int)direction;
-                VertexNode? node = currentNode.AdjascentNodes[directionInt];
+                GridNode? node = currentNode.AdjascentNodes[directionInt];
                 if (node != null)
                 {
                     DrawConnectingLine(direction, currentNode, node);
@@ -125,7 +126,7 @@ namespace CSharpSandbox
             }
         }
 
-        private void DrawConnectingLine(Direction direction, VertexNode from, VertexNode to)
+        private void DrawConnectingLine(Direction direction, GridNode from, GridNode to)
         {
             char connector = DirectionUtils.IsVertical(direction) ? symbolsMap[LayoutSymbol.StraightV] : symbolsMap[LayoutSymbol.StraightH];
             if (DirectionUtils.IsVertical(direction))
@@ -148,7 +149,7 @@ namespace CSharpSandbox
             }
         }
 
-        private static char GetNodeSymbol(VertexNode node)
+        private static char GetNodeSymbol(GridNode node)
         {
             foreach (LayoutSymbol symbol in layoutSymbolConditionsMap.Keys)
             {
