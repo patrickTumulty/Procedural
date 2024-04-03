@@ -108,21 +108,31 @@ namespace Grid
         public static void InsertNode(Direction direction, GridNode root, GridNode insertNode)
         {
             GridNode? existingNode = root.AdjascentNodes[(byte)direction];
+
             if (existingNode != null)
             {
                 if (insertNode != existingNode)
                 {
                     InsertWithExistingNode(direction, root, insertNode, existingNode);
                 }
+                return;
             }
-            else
+
+            GridNode? oppositeExistingNode = insertNode.AdjascentNodes[(byte)DirectionUtils.InvertDirection(direction)];
+            if (oppositeExistingNode != null)
             {
-                ConnectAdjascentNode(direction, root, insertNode);
-
-                ConnectNewNodeWithIntersectingLine(root, insertNode);
-
-                ConnectLineIntersections(direction, root, insertNode);
+                if (insertNode != oppositeExistingNode)
+                {
+                    InsertWithExistingNode(DirectionUtils.InvertDirection(direction), insertNode, root, oppositeExistingNode);
+                }
+                return;
             }
+
+            ConnectAdjascentNode(direction, root, insertNode);
+
+            ConnectNewNodeWithIntersectingLine(root, insertNode);
+
+            ConnectLineIntersections(direction, root, insertNode);
         }
 
         public static int GetSeachAxisValue(Axis axis, GridNode node)
@@ -297,7 +307,7 @@ namespace Grid
                     {
                         if (axis == Axis.X && insertAxis == Axis.Y)
                         {
-                            intersections.Add(new InsertionPoint(root, direction, new(root.Y, insertNode.X)));
+                            intersections.Add(new InsertionPoint(root, direction, new(insertNode.X, root.Y)));
                         }
                         else if (axis == Axis.Y && insertAxis == Axis.X)
                         {
@@ -389,6 +399,8 @@ namespace Grid
                 {
                     continue;
                 }
+
+                Console.WriteLine("Intersection");
 
                 InsertNode(point.InsertDirection, point.Node, point.InsertNode);
                 InsertNode(direction, root, point.InsertNode);

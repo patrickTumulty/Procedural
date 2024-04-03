@@ -1,7 +1,8 @@
 ﻿using CSharpSandbox;
+using Grid;
 using Procedural;
 
-LayoutDescriptor descriptor = LayoutGenerator.Generate();
+GridNode node = LayoutGenerator.Generate();
 
-_ = new LayoutPrinter(descriptor);
+_ = new GridPrinter(node);
 

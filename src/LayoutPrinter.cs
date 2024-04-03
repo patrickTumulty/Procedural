@@ -1,9 +1,8 @@
 using Grid;
-using Procedural;
 
 namespace CSharpSandbox
 {
-    public class LayoutPrinter
+    public class GridPrinter
     {
         private static readonly Dictionary<LayoutSymbol, char> symbolsMap = new() {
             { LayoutSymbol.StraightH, '─' },
@@ -38,17 +37,18 @@ namespace CSharpSandbox
 
         private readonly char[,] areaMatrix;
 
-        public LayoutPrinter(LayoutDescriptor layoutDescriptor)
+        public GridPrinter(GridNode root)
         {
-            AreaBounds ab = GridNodeUtils.GetAreaBounds(layoutDescriptor.Node);
+            AreaBounds ab = GridNodeUtils.GetAreaBounds(root);
             Console.WriteLine(ab);
 
+            int width = ((ab.MaxX - ab.MinX) * 2) + 1;
+            int height = ab.MaxY - ab.MinY + 1;
 
+            Console.WriteLine($"width={width}, height={height}");
 
-            areaMatrix = new char[layoutDescriptor.AreaHeight, (layoutDescriptor.AreaWidth * 2) - 1];
+            areaMatrix = new char[height, width];
             InitMatrix();
-
-            GridNode root = layoutDescriptor.Node;
 
             DrawLines(new(), root);
             DrawIntersections(new(), root);
