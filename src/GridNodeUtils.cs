@@ -99,12 +99,6 @@ namespace Grid
             }
         }
 
-        public static bool ConnectionExists(Direction direction, GridNode v1, GridNode v2)
-        {
-            return v1.AdjascentNodes[(byte)direction] == v2
-                   && v2.AdjascentNodes[DirectionUtils.InvertDirection((byte)direction)] == v1;
-        }
-
         public static void InsertNode(Direction direction, GridNode root, GridNode insertNode)
         {
             GridNode? existingNode = root.AdjascentNodes[(byte)direction];
@@ -202,132 +196,6 @@ namespace Grid
             };
         }
 
-        private readonly struct InsertionPoint
-        {
-            public readonly GridNode Node { get; }
-            public readonly Direction InsertDirection { get; }
-            public readonly GridNode? InsertNode { get; }
-
-            public InsertionPoint(GridNode node, Direction direction) : this(node, direction, null)
-            {
-            }
-
-            public InsertionPoint(GridNode node, Direction direction, GridNode? insertNode)
-            {
-                Node = node;
-                InsertDirection = direction;
-                InsertNode = insertNode;
-            }
-        }
-
-        private static InsertionPoint? FindInsertionPoint(HashSet<int> visited, GridNode root, GridNode insertNode)
-        {
-            if (HasBeenVisited(visited, root))
-            {
-                return null;
-            }
-
-            foreach (Direction direction in Enum.GetValues(typeof(Direction)))
-            {
-                GridNode? adjascentNode = root.AdjascentNodes[(byte)direction];
-                if (adjascentNode == null)
-                {
-                    continue;
-                }
-
-                if (NodeBetweenTwoNodes(insertNode, adjascentNode, root))
-                {
-                    return new InsertionPoint(root, direction);
-                }
-            }
-
-            foreach (GridNode? adjascentNode in root.AdjascentNodes)
-            {
-                if (adjascentNode == null)
-                {
-                    continue;
-                }
-
-                InsertionPoint? insertionPoint = FindInsertionPoint(visited, adjascentNode, insertNode);
-                if (insertionPoint != null)
-                {
-                    return insertionPoint;
-                }
-            }
-
-            return null;
-        }
-
-        private static void FindIntersectionPoints(HashSet<int> visited,
-                                                   List<InsertionPoint> intersections,
-                                                   GridNode root,
-                                                   GridNode insertNode,
-                                                   Direction insertDirection,
-                                                   int insertLength)
-        {
-            if (HasBeenVisited(visited, root))
-            {
-                return;
-            }
-
-            Axis insertAxis = DirectionUtils.GetAxis(insertDirection);
-
-            foreach (Direction direction in Enum.GetValues(typeof(Direction)))
-            {
-                GridNode? adjascentNode = root.AdjascentNodes[(byte)direction];
-                if (adjascentNode == null)
-                {
-                    continue;
-                }
-
-                Axis axis = DirectionUtils.GetAxis(direction);
-
-                if (NodeIntersectsLine(axis, insertNode, adjascentNode, root))
-                {
-                    bool isInBounds = false;
-                    switch (insertDirection)
-                    {
-                        case Direction.Up:
-                            isInBounds = root.Y > insertNode.Y && root.Y < (insertNode.Y + insertLength);
-                            break;
-                        case Direction.Left:
-                            isInBounds = root.X > insertNode.X && root.X < (insertNode.X + insertLength);
-                            break;
-                        case Direction.Down:
-                            isInBounds = root.Y < insertNode.Y && root.Y > (insertNode.Y - insertLength);
-                            break;
-                        case Direction.Right:
-                            isInBounds = root.X < insertNode.X && root.X > (insertNode.X - insertLength);
-                            break;
-                        default:
-                            break;
-                    }
-
-                    if (isInBounds)
-                    {
-                        if (axis == Axis.X && insertAxis == Axis.Y)
-                        {
-                            intersections.Add(new InsertionPoint(root, direction, new(insertNode.X, root.Y)));
-                        }
-                        else if (axis == Axis.Y && insertAxis == Axis.X)
-                        {
-                            intersections.Add(new InsertionPoint(root, direction, new(root.X, insertNode.Y)));
-                        }
-                    }
-                }
-            }
-
-            foreach (GridNode? adjascentNode in root.AdjascentNodes)
-            {
-                if (adjascentNode == null)
-                {
-                    continue;
-                }
-
-                FindIntersectionPoints(visited, intersections, adjascentNode, insertNode, insertDirection, insertLength);
-            }
-        }
-
         private static bool NodeBetweenTwoNodes(GridNode node, GridNode nodeA, GridNode nodeB)
         {
             if (node.X == nodeA.X && node.X == nodeB.X)
@@ -352,10 +220,10 @@ namespace Grid
         /// Get the length of the line between two nodes
         /// </summary>
         /// <param name="a">Node A</param>
-        /// <param name="direction">Direction</param>
         /// <param name="b">Node B</param>
+        /// <param name="direction">Direction</param>
         /// <return>line length between a and b</returns>
-        private static int GetLineLength(GridNode a, Direction direction, GridNode b)
+        private static int GetLineLength(GridNode a, GridNode b, Direction direction)
         {
             return direction switch
             {
@@ -373,11 +241,25 @@ namespace Grid
         /// <param name="insertNode">Node that is being inserted</param>
         private static void ConnectNewNodeWithIntersectingLine(GridNode root, GridNode insertNode)
         {
-            InsertionPoint? insertionPoint = FindInsertionPoint(new HashSet<int>(), root, insertNode);
-            if (insertionPoint != null)
+            _ = FindFirst(root, (node) =>
             {
-                InsertNode(insertionPoint.Value.InsertDirection, insertionPoint.Value.Node, insertNode);
-            }
+                foreach (Direction direction in Enum.GetValues(typeof(Direction)))
+                {
+                    GridNode? adjascentNode = node.AdjascentNodes[(byte)direction];
+                    if (adjascentNode == null)
+                    {
+                        continue;
+                    }
+
+                    if (NodeBetweenTwoNodes(insertNode, adjascentNode, node))
+                    {
+                        InsertNode(direction, node, insertNode);
+                        return true;
+                    }
+                }
+
+                return false;
+            });
         }
 
         /// <summary>
@@ -390,21 +272,54 @@ namespace Grid
         /// <param name="insertNode">Node that is being inserted</param>
         private static void ConnectLineIntersections(Direction direction, GridNode root, GridNode insertNode)
         {
-            List<InsertionPoint> intersectionPoints = new();
-            FindIntersectionPoints(new HashSet<int>(), intersectionPoints, root, insertNode, direction, GetLineLength(root, direction, insertNode));
+            int lineLength = GetLineLength(root, insertNode, direction);
+            Axis insertAxis = DirectionUtils.GetAxis(direction);
 
-            foreach (InsertionPoint point in intersectionPoints)
+            TraverseBF(root, (node) =>
             {
-                if (point.InsertNode == null)
+                foreach (Direction adjascentDirection in Enum.GetValues(typeof(Direction)))
                 {
-                    continue;
+                    GridNode? adjascentNode = node.AdjascentNodes[(byte)adjascentDirection];
+                    if (adjascentNode == null)
+                    {
+                        continue;
+                    }
+
+                    Axis perpendicularAxis = DirectionUtils.GetAxis(adjascentDirection);
+
+                    if (NodeIntersectsLine(perpendicularAxis, insertNode, adjascentNode, node) &&
+                        TransientNodeWithinLineBounds(node, insertNode, direction, lineLength))
+                    {
+                        GridNode? newGridNode = null;
+                        if (perpendicularAxis == Axis.X && insertAxis == Axis.Y)
+                        {
+                            newGridNode = new(insertNode.X, node.Y);
+                        }
+                        else if (perpendicularAxis == Axis.Y && insertAxis == Axis.X)
+                        {
+                            newGridNode = new(node.X, insertNode.Y);
+                        }
+
+                        if (newGridNode != null)
+                        {
+                            InsertNode(adjascentDirection, node, newGridNode);
+                            InsertNode(direction, root, newGridNode);
+                        }
+                    }
                 }
+            });
+        }
 
-                Console.WriteLine("Intersection");
-
-                InsertNode(point.InsertDirection, point.Node, point.InsertNode);
-                InsertNode(direction, root, point.InsertNode);
-            }
+        private static bool TransientNodeWithinLineBounds(GridNode transientNode, GridNode lineNode, Direction direction, int lineLength)
+        {
+            return direction switch
+            {
+                Direction.Up => transientNode.Y > lineNode.Y && transientNode.Y < (lineNode.Y + lineLength),
+                Direction.Left => transientNode.X > lineNode.X && transientNode.X < (lineNode.X + lineLength),
+                Direction.Down => transientNode.Y < lineNode.Y && transientNode.Y > (lineNode.Y - lineLength),
+                Direction.Right => transientNode.X < lineNode.X && transientNode.X > (lineNode.X - lineLength),
+                _ => false,
+            };
         }
 
         public static AreaBounds GetAreaBounds(GridNode root)
@@ -421,6 +336,11 @@ namespace Grid
             });
 
             return areaBounds;
+        }
+
+        public static void TraverseBF(GridNode? node, Action<GridNode> action)
+        {
+            TraverseBF(new(), node, action);
         }
 
         private static void TraverseBF(HashSet<int> visisted, GridNode? node, Action<GridNode> action)
@@ -443,24 +363,63 @@ namespace Grid
             }
         }
 
-        private static void TraverseDF(HashSet<int> visisted, GridNode? node, Action<GridNode> action)
+        public static void TraverseDF(GridNode? node, Action<GridNode> action)
+        {
+            TraverseDF(new(), node, action);
+        }
+
+        private static void TraverseDF(HashSet<int> visited, GridNode? node, Action<GridNode> action)
         {
             if (node == null)
             {
                 return;
             }
 
-            if (HasBeenVisited(visisted, node))
+            if (HasBeenVisited(visited, node))
             {
                 return;
             }
 
             foreach (Direction direction in Enum.GetValues(typeof(Direction)))
             {
-                TraverseDF(visisted, node.AdjascentNodes[(byte)direction], action);
+                TraverseDF(visited, node.AdjascentNodes[(byte)direction], action);
             }
 
             action(node);
+        }
+
+        public static GridNode? FindFirst(GridNode? node, Predicate<GridNode> predicate)
+        {
+            return FindFirst(new(), node, predicate);
+        }
+
+        private static GridNode? FindFirst(HashSet<int> visited, GridNode? node, Predicate<GridNode> predicate)
+        {
+            if (node == null)
+            {
+                return null;
+            }
+
+            if (HasBeenVisited(visited, node))
+            {
+                return null;
+            }
+
+            if (predicate(node))
+            {
+                return node;
+            }
+
+            foreach (Direction direction in Enum.GetValues(typeof(Direction)))
+            {
+                GridNode? n = FindFirst(visited, node.AdjascentNodes[(byte)direction], predicate);
+                if (n != null)
+                {
+                    return n;
+                }
+            }
+
+            return null;
         }
     }
 }
