@@ -421,6 +421,23 @@ namespace Grid
 
             return null;
         }
+
+        public static List<GridNode> CollectNodes(GridNode? node, Predicate<GridNode> predicate)
+        {
+            HashSet<GridNode> nodeSet = new();
+            HashSet<int> visited = new();
+
+            TraverseBF(visited, node, (currentNode) =>
+            {
+                if (predicate(currentNode))
+                {
+                    _ = nodeSet.Add(currentNode);
+                }
+
+            });
+
+            return nodeSet.ToList();
+        }
     }
 }
 
