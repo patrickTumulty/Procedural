@@ -28,7 +28,7 @@ namespace Procedural
                     continue;
                 }
 
-                GridNodeUtils.AddRectangle(current, random.Next(5, 20), random.Next(5, 25));
+                GridNodeUtils.AddRectangle(current, random.Next(5, 10), random.Next(5, 15));
             }
 
             // GridNodeUtils.AddRectangle(root, width, height);
@@ -47,12 +47,12 @@ namespace Procedural
             // GridNodeUtils.AddRectangle(root, 18, 3);
             // GridNodeUtils.AddRectangle(root, 2, 2);
 
-            // PrintGraph(new(), root);
+            PrintGraph(new(), root);
 
             return root;
         }
 
-        private static void PrintGraph(HashSet<int> visited, GridNode? root)
+        public static void PrintGraph(HashSet<int> visited, GridNode? root)
         {
             if (root == null || visited.Contains(root.GetHashCode()))
             {

@@ -1,3 +1,4 @@
+
 namespace Grid
 {
     public class GridNode
@@ -21,6 +22,35 @@ namespace Grid
         public override string ToString()
         {
             return $"({X,2}, {Y,2})";
+        }
+
+        public bool GreaterThan(Direction direction, GridNode node)
+        {
+            return direction switch
+            {
+                Direction.Up => Y < node.Y,
+                Direction.Left => X < node.X,
+                Direction.Down => Y > node.Y,
+                Direction.Right => X > node.X,
+                _ => false,
+            };
+        }
+
+        public bool LessThan(Direction direction, GridNode node)
+        {
+            return direction switch
+            {
+                Direction.Up => Y > node.Y,
+                Direction.Left => X > node.X,
+                Direction.Down => Y < node.Y,
+                Direction.Right => X < node.X,
+                _ => false,
+            };
+        }
+
+        public bool CoordinatesMatch(GridNode node)
+        {
+            return X == node.X && Y == node.Y;
         }
     }
 }

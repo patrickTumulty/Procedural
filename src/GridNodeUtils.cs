@@ -71,13 +71,13 @@ namespace Grid
     {
         public static void AddRectangle(GridNode root, int width, int height)
         {
-            GridNode topRight = new(root.X + (width - 1), root.Y);
+            GridNode topRight = GetOrCreateNode(root, root.X + (width - 1), root.Y);
             InsertNode(Direction.Right, root, topRight);
 
-            GridNode bottomRight = new(topRight.X, topRight.Y + (height - 1));
+            GridNode bottomRight = GetOrCreateNode(root, topRight.X, topRight.Y + (height - 1));
             InsertNode(Direction.Down, topRight, bottomRight);
 
-            GridNode bottomLeft = new(bottomRight.X - (width - 1), bottomRight.Y);
+            GridNode bottomLeft = GetOrCreateNode(root, bottomRight.X - (width - 1), bottomRight.Y);
             InsertNode(Direction.Left, bottomRight, bottomLeft);
 
             InsertNode(Direction.Up, bottomLeft, root);
@@ -99,10 +99,29 @@ namespace Grid
             }
         }
 
+        /// <summary>
+        /// Get an existing node with the given coordinates, or create a new node
+        /// with those coordinates
+        /// </summary>
+        /// <param name="root">root node</param>
+        /// <param name="x">x coordinate</param>
+        /// <param name="y">y coordinate</param>
+        /// <returns>grid node instance</returns>
+        public static GridNode GetOrCreateNode(GridNode root, int x, int y)
+        {
+            GridNode? exsistingInsertNode = FindFirst(root, (node) => node.X == x && node.Y == y);
+            return exsistingInsertNode ?? new(x, y);
+        }
+
+        /// <summary>
+        /// Insert a node into the network
+        /// </summary>
+        /// <param name="direction">Insert direction</param>
+        /// <param name="root">root node</param>
+        /// <param name="insertNode">insert node</param>
         public static void InsertNode(Direction direction, GridNode root, GridNode insertNode)
         {
             GridNode? existingNode = root.AdjascentNodes[(byte)direction];
-
             if (existingNode != null)
             {
                 if (insertNode != existingNode)
@@ -129,11 +148,6 @@ namespace Grid
             ConnectLineIntersections(direction, root, insertNode);
         }
 
-        public static int GetSeachAxisValue(Axis axis, GridNode node)
-        {
-            return axis == Axis.X ? node.X : node.Y;
-        }
-
         private static bool HasBeenVisited(HashSet<int> visited, GridNode node)
         {
             int hash = node.GetHashCode();
@@ -144,18 +158,6 @@ namespace Grid
 
             _ = visited.Add(hash);
 
-            return false;
-        }
-
-        public static bool IsConnected(GridNode root, GridNode node)
-        {
-            foreach (GridNode? n in root.AdjascentNodes)
-            {
-                if (n != null && n == node)
-                {
-                    return true;
-                }
-            }
             return false;
         }
 
@@ -174,29 +176,23 @@ namespace Grid
 
         public static bool GreaterThan(Direction direction, GridNode a, GridNode b)
         {
-            return direction switch
-            {
-                Direction.Up => a.Y < b.Y,
-                Direction.Left => a.X < b.X,
-                Direction.Down => a.Y > b.Y,
-                Direction.Right => a.X > b.X,
-                _ => false,
-            };
+            return a.GreaterThan(direction, b);
         }
 
         public static bool LessThan(Direction direction, GridNode a, GridNode b)
         {
-            return direction switch
-            {
-                Direction.Up => a.Y > b.Y,
-                Direction.Left => a.X > b.X,
-                Direction.Down => a.Y < b.Y,
-                Direction.Right => a.X < b.X,
-                _ => false,
-            };
+            return a.LessThan(direction, b);
         }
 
-        private static bool NodeBetweenTwoNodes(GridNode node, GridNode nodeA, GridNode nodeB)
+        /// <summary>
+        /// Node point intersects line between two points
+        /// •────•────• 
+        /// </summary>
+        /// <param name="node">intersection node</param>
+        /// <param name="nodeA">node a</param>
+        /// <param name="nodeB">node b</param>
+        /// <returns>true if node coordinates are between the two points</returns>
+        private static bool NodePointIntersectsLine(GridNode node, GridNode nodeA, GridNode nodeB)
         {
             if (node.X == nodeA.X && node.X == nodeB.X)
             {
@@ -209,7 +205,7 @@ namespace Grid
             return false;
         }
 
-        private static bool NodeIntersectsLine(Axis axis, GridNode node, GridNode nodeA, GridNode nodeB)
+        private static bool NodePassesThroughLine(Axis axis, GridNode node, GridNode nodeA, GridNode nodeB)
         {
             return axis == Axis.Y
                 ? NumberUtils.WithinRangeExclusive(node.Y, nodeA.Y, nodeB.Y)
@@ -251,7 +247,7 @@ namespace Grid
                         continue;
                     }
 
-                    if (NodeBetweenTwoNodes(insertNode, adjascentNode, node))
+                    if (NodePointIntersectsLine(insertNode, adjascentNode, node))
                     {
                         InsertNode(direction, node, insertNode);
                         return true;
@@ -287,17 +283,17 @@ namespace Grid
 
                     Axis perpendicularAxis = DirectionUtils.GetAxis(adjascentDirection);
 
-                    if (NodeIntersectsLine(perpendicularAxis, insertNode, adjascentNode, node) &&
+                    if (NodePassesThroughLine(perpendicularAxis, insertNode, adjascentNode, node) &&
                         TransientNodeWithinLineBounds(node, insertNode, direction, lineLength))
                     {
                         GridNode? newGridNode = null;
                         if (perpendicularAxis == Axis.X && insertAxis == Axis.Y)
                         {
-                            newGridNode = new(insertNode.X, node.Y);
+                            newGridNode = GetOrCreateNode(root, insertNode.X, node.Y);
                         }
                         else if (perpendicularAxis == Axis.Y && insertAxis == Axis.X)
                         {
-                            newGridNode = new(node.X, insertNode.Y);
+                            newGridNode = GetOrCreateNode(root, node.X, insertNode.Y);
                         }
 
                         if (newGridNode != null)
@@ -310,6 +306,16 @@ namespace Grid
             });
         }
 
+
+        /// <summary>
+        /// Check that a transient node exists within the range of the lineNode 
+        /// of a particular length in a particular direction
+        /// </summary>
+        /// <param name="transientNode">transient node</param>
+        /// <param name="lineNode">line node</param>
+        /// <param name="direction">line direction</param>
+        /// <param name="lineLength">line length</param>
+        /// <returns>true if transient node exists within the range of the line</returns>
         private static bool TransientNodeWithinLineBounds(GridNode transientNode, GridNode lineNode, Direction direction, int lineLength)
         {
             return direction switch
